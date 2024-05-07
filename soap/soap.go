@@ -30,10 +30,14 @@ type SOAPEnvelopeResponse struct {
 }
 
 type SOAPEnvelope struct {
-	XMLName xml.Name      `xml:"soap:Envelope"`
-	XmlNS   string        `xml:"xmlns:soap,attr"`
-	Headers []interface{} `xml:"soap:Header"`
+	XMLName xml.Name      `xml:"soapenv:Envelope"`
+	XmlNS   []xml.Attr    `xml:"xmlns,attr"`
+	Headers []interface{} `xml:"soapenv:Header"`
 	Body    SOAPBody
+}
+
+type SOAPEnvelopeXmlNS struct {
+	XmlNS string `xml:",chardata"`
 }
 
 type SOAPHeaderResponse struct {
@@ -43,7 +47,7 @@ type SOAPHeaderResponse struct {
 }
 
 type SOAPBody struct {
-	XMLName xml.Name `xml:"soap:Body"`
+	XMLName xml.Name `xml:"soapenv:Body"`
 
 	Content interface{} `xml:",omitempty"`
 
@@ -248,12 +252,16 @@ type options struct {
 	httpHeaders      map[string]string
 	mtom             bool
 	mma              bool
+	xmlNsSoapEnv     map[string]string
 }
 
 var defaultOptions = options{
 	timeout:          time.Duration(30 * time.Second),
 	contimeout:       time.Duration(90 * time.Second),
 	tlshshaketimeout: time.Duration(15 * time.Second),
+	xmlNsSoapEnv: map[string]string{
+		"soap": XmlNsSoapEnv,
+	},
 }
 
 // A Option sets options such as credentials, tls, etc.
@@ -326,6 +334,13 @@ func WithMTOM() Option {
 func WithMIMEMultipartAttachments() Option {
 	return func(o *options) {
 		o.mma = true
+	}
+}
+
+// WithXmlNsSoapEnv is an Option to set Soap Envelope Namespace
+func WithXmlNsSoapEnv(ns map[string]string) Option {
+	return func(o *options) {
+		o.xmlNsSoapEnv = ns
 	}
 }
 
@@ -410,7 +425,12 @@ func (s *Client) call(ctx context.Context, soapAction string, request, response 
 	retAttachments *[]MIMEMultipartAttachment) error {
 	// SOAP envelope capable of namespace prefixes
 	envelope := SOAPEnvelope{
-		XmlNS: XmlNsSoapEnv,
+		XmlNS: make([]xml.Attr, 0),
+	}
+
+	for k, v := range s.opts.xmlNsSoapEnv {
+		tmp := xml.Attr{Name: xml.Name{Local: "xmlns:" + k}, Value: v}
+		envelope.XmlNS = append(envelope.XmlNS, tmp)
 	}
 
 	envelope.Headers = s.headers
